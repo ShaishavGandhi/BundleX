@@ -1,6 +1,7 @@
 # BundleX
 
 ![CircleCI branch](https://img.shields.io/circleci/project/github/shaishavgandhi05/BundleX/master.svg)
+
 Generate readable extensions on Bundle to easily bind and set extras. This is still a WIP. 
 
 ## Use Case
