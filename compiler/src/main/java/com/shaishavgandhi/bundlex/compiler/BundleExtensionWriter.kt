@@ -31,7 +31,9 @@ class BundleExtensionWriter(val messager: Messager) {
         "float" to ClassName.bestGuess("kotlin.Float"),
         "java.lang.Float" to ClassName.bestGuess("kotlin.Float"),
         "int[]" to ClassName.bestGuess("IntArray"),
-        "java.lang.Integer[]" to ClassName.bestGuess("IntArray")
+        "java.lang.Integer[]" to ClassName.bestGuess("IntArray"),
+        "java.lang.Long[]" to ClassName.bestGuess("LongArray"),
+        "long[]" to ClassName.bestGuess("LongArray")
     )
 
     private val typeMapper = object : HashMap<String, String>() {
@@ -47,12 +49,15 @@ class BundleExtensionWriter(val messager: Messager) {
             put("java.lang.Long", "Long")
             put("long", "Long")
             put("long[]", "LongArray")
+            put("java.lang.Long[]", "LongArray")
             put("double", "Double")
             put("java.lang.Double", "Double")
             put("double[]", "DoubleArray")
+            put("java.lang.Double[]", "DoubleArray")
             put("float", "Float")
             put("java.lang.Float", "Float")
             put("float[]", "FloatArray")
+            put("java.lang.Float[]", "FloatArray")
             put("byte", "Byte")
             put("byte[]", "ByteArray")
             put("short", "Short")
@@ -84,13 +89,28 @@ class BundleExtensionWriter(val messager: Messager) {
             if (returnType != null) {
                 val name = element.simpleName.toString()
                 val getterName = "get${name.capitalize()}"
+
+                // Nullable getter
                 fileBuilder.addFunction(FunSpec.builder(getterName)
                     .receiver(bundleClass)
-                    .addParameter(ParameterSpec.builder("defaultValue", returnType.asNullable())
-                        .build())
-                    .returns(returnType)
+                    .returns(returnType.asNullable())
                     .addStatement("return get%L(\"$key\")", bundleMapType)
                     .build())
+
+                // Non-null getter
+                fileBuilder.addFunction(FunSpec.builder(getterName)
+                    .receiver(bundleClass)
+                    .addParameter(ParameterSpec.builder("defaultValue", returnType)
+                        .build())
+                    .returns(returnType)
+                    .beginControlFlow("if (containsKey(\"%L\"))", key)
+                    .addStatement("return get%L(\"$key\")", bundleMapType)
+                    .endControlFlow()
+                    .addStatement("return defaultValue")
+                    .build())
+            } else {
+                messager.printMessage(Diagnostic.Kind.ERROR, "Couldn't find kotlin map for " +
+                        "${element.asType()}")
             }
         }
 
