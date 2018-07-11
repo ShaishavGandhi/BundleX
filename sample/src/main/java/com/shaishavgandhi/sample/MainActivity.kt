@@ -9,8 +9,9 @@ class MainActivity : AppCompatActivity() {
     @Extra(key = "shaishav")
     lateinit var message: String
 
-    @Extra
-    lateinit var intArray: Array<Int>
+    @Extra lateinit var intArray: Array<Int>
+
+    @Extra lateinit var longArray: Array<Long>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
