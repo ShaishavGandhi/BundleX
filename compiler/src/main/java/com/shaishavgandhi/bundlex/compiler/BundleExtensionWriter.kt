@@ -89,6 +89,7 @@ class BundleExtensionWriter(val messager: Messager) {
             if (returnType != null) {
                 val name = element.simpleName.toString()
                 val getterName = "get${name.capitalize()}"
+                val putterName = "put${name.capitalize()}"
 
                 // Nullable getter
                 fileBuilder.addFunction(FunSpec.builder(getterName)
@@ -107,6 +108,13 @@ class BundleExtensionWriter(val messager: Messager) {
                     .addStatement("return get%L(\"$key\")", bundleMapType)
                     .endControlFlow()
                     .addStatement("return defaultValue")
+                    .build())
+
+                // Putter
+                fileBuilder.addFunction(FunSpec.builder(putterName)
+                    .receiver(bundleClass)
+                    .addParameter(ParameterSpec.builder("value", returnType).build())
+                    .addStatement("put%L(\"%L\", %L)", bundleMapType, key, "value")
                     .build())
             } else {
                 messager.printMessage(Diagnostic.Kind.ERROR, "Couldn't find kotlin map for " +
