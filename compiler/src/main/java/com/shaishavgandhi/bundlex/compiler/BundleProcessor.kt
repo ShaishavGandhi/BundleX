@@ -40,7 +40,7 @@ class BundleProcessor: AbstractProcessor() {
             return false
         }
 
-        val writer = BundleExtensionWriter(messager)
+        val writer = BundleExtensionWriter(messager, typeUtils, elementUtils)
         writer.writeExtensions(elements, outputDir)
 
         return true
