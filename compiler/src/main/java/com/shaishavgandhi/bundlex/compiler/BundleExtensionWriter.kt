@@ -6,9 +6,16 @@ import java.io.File
 import java.util.HashMap
 import javax.annotation.processing.Messager
 import javax.lang.model.element.Element
+import javax.lang.model.type.DeclaredType
+import javax.lang.model.type.TypeMirror
+import javax.lang.model.util.Elements
+import javax.lang.model.util.Types
 import javax.tools.Diagnostic
 
-class BundleExtensionWriter(val messager: Messager) {
+class BundleExtensionWriter(
+    val messager: Messager,
+    val typeUtils: Types,
+    val elementUtils: Elements) {
 
     val bundleClass = ClassName.bestGuess("android.os.Bundle")
 
@@ -61,7 +68,16 @@ class BundleExtensionWriter(val messager: Messager) {
         "char" to ClassName("kotlin", "Char"),
         "java.lang.Character" to ClassName("kotlin", "Char"),
         "char[]" to ClassName("kotlin", "CharArray"),
-        "java.lang.Character[]" to ClassName("kotlin", "CharArray")
+        "java.lang.Character[]" to ClassName("kotlin", "CharArray"),
+
+        "java.lang.CharSequence" to ClassName("kotlin", "CharSequence"),
+        "java.lang.CharSequence[]" to ParameterizedTypeName.get(
+            ClassName("kotlin", "Array"),
+            ClassName("kotlin", "CharSequence")),
+        "java.util.ArrayList<java.lang.CharSequence>" to ParameterizedTypeName.get(
+            ClassName("kotlin.collections", "ArrayList"),
+            ClassName("kotlin", "CharSequence")
+        )
     )
 
     private val typeMapper = object : HashMap<String, String>() {
@@ -118,53 +134,168 @@ class BundleExtensionWriter(val messager: Messager) {
         val fileBuilder = FileSpec.builder(packageName, "BundleExtensions")
         for (element in elements) {
             val key = element.getKey()
-            val returnType: TypeName? = kotlinMapper[element.asType().toString()]
+
+            val returnType: TypeName = if (kotlinMapper[element.asType().toString()] != null)
+                kotlinMapper[element.asType().toString()]!! else ClassName.bestGuess(element.asType().toString())
+
             val bundleMapType = returnType(element)
-            if (returnType != null) {
-                val name = element.simpleName.toString()
-                val getterName = "get${name.capitalize()}"
-                val putterName = "put${name.capitalize()}"
+            val name = element.simpleName.toString()
+            val getterName = "get${name.capitalize()}"
+            val putterName = "put${name.capitalize()}"
 
-                // Nullable getter
-                fileBuilder.addFunction(FunSpec.builder(getterName)
-                    .receiver(bundleClass)
-                    .returns(returnType.asNullable())
-                    .addStatement("return get%L(\"$key\")", bundleMapType)
-                    .build())
+            val isCastNecessary = castingNecessary(bundleMapType)
 
-                // Non-null getter
-                fileBuilder.addFunction(FunSpec.builder(getterName)
-                    .receiver(bundleClass)
-                    .addParameter(ParameterSpec.builder("defaultValue", returnType)
-                        .build())
-                    .returns(returnType)
-                    .beginControlFlow("if (containsKey(\"%L\"))", key)
-                    .addStatement("return get%L(\"$key\")", bundleMapType)
-                    .endControlFlow()
-                    .addStatement("return defaultValue")
-                    .build())
+            // Nullable getter
+            val nullableGetterBuilder = FunSpec.builder(getterName)
+                .receiver(bundleClass)
+                .returns(returnType.asNullable())
 
-                // Putter
-                fileBuilder.addFunction(FunSpec.builder(putterName)
-                    .receiver(bundleClass)
-                    .addParameter(ParameterSpec.builder("value", returnType).build())
-                    .addStatement("put%L(\"%L\", %L)", bundleMapType, key, "value")
+            fileBuilder.addFunction(
+                addReturnStatement(bundleMapType, key, returnType, nullableGetterBuilder, isCastNecessary)
+                    .build()
+            )
+
+            // Non-null getter
+            val nonNullGetterBuilder = FunSpec.builder(getterName)
+                .receiver(bundleClass)
+                .addParameter(ParameterSpec.builder("defaultValue", returnType)
                     .build())
-            } else {
-                messager.printMessage(Diagnostic.Kind.ERROR, "Couldn't find kotlin map for " +
-                        "${element.asType()}")
-            }
+                .returns(returnType)
+                .beginControlFlow("if (containsKey(\"%L\"))", key)
+
+
+            fileBuilder.addFunction(
+                addReturnStatement(bundleMapType, key, returnType, nonNullGetterBuilder, isCastNecessary)
+                .endControlFlow()
+                .addStatement("return defaultValue")
+                .build())
+
+            // Putter
+            fileBuilder.addFunction(FunSpec.builder(putterName)
+                .receiver(bundleClass)
+                .addParameter(ParameterSpec.builder("value", returnType).build())
+                .addStatement("put%L(\"%L\", %L)", bundleMapType, key, "value")
+                .build())
+
         }
 
         fileBuilder.build().writeTo(outputDir)
     }
 
+    fun addReturnStatement(bundleMapType: String,
+                           key: String,
+                           returnType: TypeName,
+                           function: FunSpec.Builder,
+                           castNecessary: Boolean = false): FunSpec.Builder {
+        if (castNecessary) {
+            return function.addStatement("return get%L(\"$key\") as %T", bundleMapType, returnType)
+        } else {
+            return function.addStatement("return get%L(\"$key\")", bundleMapType)
+        }
+    }
+
+    private fun castingNecessary(bundleMapType: String): Boolean {
+        return bundleMapType == "Serializable" || bundleMapType == "ParcelableArray"
+    }
+
     fun returnType(element: Element): String {
-        val returnType = typeMapper[element.asType().toString()]
+        val returnType = if (typeMapper[element.asType().toString()] == null) {
+            // Not in the normal mapper. Let's check some more
+            if (isParcelable(typeUtils, elementUtils, element.asType())) {
+                 "Parcelable"
+            } else if (isParcelableList(typeUtils, elementUtils, element.asType())) {
+                "ParcelableArrayList"
+            } else if (isSparseParcelableArrayList(typeUtils, elementUtils, element.asType())) {
+                "SparseParcelableArray"
+            } else if (isParcelableArray(typeUtils, elementUtils, element.asType())) {
+                "ParcelableArray"
+            } else if (isSerializable(typeUtils, elementUtils, element.asType())) {
+                "Serializable"
+            } else {
+                null
+            }
+        } else {
+            typeMapper[element.asType().toString()]
+        }
+
         if (returnType == null) {
-            // TODO: Do parcelable, serializable checks here
-            messager.printMessage(Diagnostic.Kind.WARNING, element.asType().toString())
+            messager.printMessage(Diagnostic.Kind.ERROR, "Element ${element.simpleName} cannot be used with Bundle")
         }
         return returnType!!
+    }
+
+    private fun isParcelable(
+        typeUtils: Types,
+        elementUtils: Elements,
+        typeMirror: TypeMirror
+    ): Boolean {
+        return typeUtils.isAssignable(
+            typeMirror, elementUtils.getTypeElement("android.os.Parcelable")
+                .asType()
+        )
+    }
+
+    private fun isParcelableArray(
+        typeUtils: Types,
+        elementUtils: Elements,
+        typeMirror: TypeMirror
+    ): Boolean {
+        return typeUtils.isAssignable(
+            typeMirror, typeUtils.getArrayType(
+                elementUtils
+                    .getTypeElement("android.os.Parcelable").asType()
+            )
+        )
+    }
+
+    private fun isParcelableList(
+        typeUtils: Types,
+        elementUtils: Elements,
+        typeMirror: TypeMirror
+    ): Boolean {
+        val type = typeUtils.getDeclaredType(
+            elementUtils.getTypeElement("java.util" + ".ArrayList"),
+            elementUtils.getTypeElement("android.os.Parcelable").asType()
+        )
+        if (typeUtils.isAssignable(typeUtils.erasure(typeMirror), type)) {
+            val typeArguments = (typeMirror as DeclaredType).typeArguments
+            return typeArguments != null && typeArguments.size >= 1 &&
+                    typeUtils.isAssignable(
+                        typeArguments[0],
+                        elementUtils.getTypeElement("android.os.Parcelable").asType()
+                    )
+        }
+        return false
+    }
+
+    private fun isSparseParcelableArrayList(
+        typeUtils: Types,
+        elementUtils: Elements,
+        typeMirror: TypeMirror
+    ): Boolean {
+        val type = typeUtils.getDeclaredType(
+            elementUtils.getTypeElement("android.util.SparseArray"),
+            elementUtils.getTypeElement("android.os.Parcelable").asType()
+        )
+        if (typeUtils.isAssignable(typeUtils.erasure(typeMirror), type)) {
+            val typeArguments = (typeMirror as DeclaredType).typeArguments
+            return typeArguments != null && typeArguments.size >= 1 &&
+                    typeUtils.isAssignable(
+                        typeArguments[0],
+                        elementUtils.getTypeElement("android.os.Parcelable").asType()
+                    )
+        }
+        return false
+    }
+
+    private fun isSerializable(
+        typeUtils: Types,
+        elementUtils: Elements,
+        typeMirror: TypeMirror
+    ): Boolean {
+        return typeUtils.isAssignable(
+            typeMirror, elementUtils.getTypeElement("java.io.Serializable")
+                .asType()
+        )
     }
 }

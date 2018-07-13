@@ -1,6 +1,11 @@
 package com.shaishavgandhi.sample;
 
+import android.util.Size;
+import android.util.SizeF;
+
 import com.shaishavgandhi.navigator.Extra;
+
+import java.util.ArrayList;
 
 public class BundleXJavaSample {
 
@@ -35,4 +40,11 @@ public class BundleXJavaSample {
     @Extra Boolean javaBigBool;
     @Extra boolean[] javaBoolArray;
     @Extra Boolean[] javaBigBoolArray;
+    @Extra CharSequence javaCharSequence;
+    @Extra CharSequence[] javaCharSequenceArray;
+    @Extra ArrayList<CharSequence> javaCharSequenceList;
+    @Extra Size androidSize;
+    @Extra SizeF androidSizeF;
+    @Extra SampleSerializable sampleSerializable;
+    @Extra KotlinParcelable kotlinParcelable;
 }
