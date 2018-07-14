@@ -18,6 +18,7 @@ class BundleExtensionWriter(
     val elementUtils: Elements) {
 
     val bundleClass = ClassName.bestGuess("android.os.Bundle")
+    val kotlinArrayList = ClassName("kotlin.collections", "ArrayList")
 
     /**
      * Java type -> Kotlin type mapper.
@@ -75,9 +76,7 @@ class BundleExtensionWriter(
             ClassName("kotlin", "Array"),
             ClassName("kotlin", "CharSequence")),
         "java.util.ArrayList<java.lang.CharSequence>" to ParameterizedTypeName.get(
-            ClassName("kotlin.collections", "ArrayList"),
-            ClassName("kotlin", "CharSequence")
-        )
+            kotlinArrayList, ClassName("kotlin", "CharSequence"))
     )
 
     private val typeMapper = object : HashMap<String, String>() {
@@ -135,6 +134,8 @@ class BundleExtensionWriter(
         for (element in elements) {
             val key = element.getKey()
 
+            preprocessElement(element)
+
             val returnType: TypeName = if (kotlinMapper[element.asType().toString()] != null)
                 kotlinMapper[element.asType().toString()]!! else ClassName.bestGuess(element.asType().toString())
 
@@ -182,7 +183,59 @@ class BundleExtensionWriter(
         fileBuilder.build().writeTo(outputDir)
     }
 
-    fun addReturnStatement(bundleMapType: String,
+
+    /**
+     * Pre-processes the elements in case they are Parcelable,
+     * SparseArray<Parcelable> or Serializable. Since the given
+     * elements are actually subtypes of the aforementioned types,
+     * we add them to the [kotlinMapper] as well as [typeMapper]
+     * to get their types while code generating.
+     *
+     * @param element to pre-process
+     */
+    private fun preprocessElement(element: Element) {
+        if (isParcelable(typeUtils, elementUtils, element.asType())) {
+            // Add it to the Bundle mapper.
+            typeMapper[element.asType().toString()] = "Parcelable"
+        } else if (isParcelableList(typeUtils, elementUtils, element.asType())) {
+            // Add it to the Bundle mapper.
+            typeMapper[element.asType().toString()] = "ParcelableArrayList"
+
+            // Convert the java.util.ArrayList to kotlin.collections.ArrayList
+            // Even if the element is declared in Kotlin class, the underlying JVM
+            // impl is still java.util.ArrayList and that's what we get.
+            val genericType = (element.asType() as DeclaredType).typeArguments[0].asTypeName()
+            kotlinMapper[element.asType().toString()] = ParameterizedTypeName.get(kotlinArrayList, genericType)
+        } else if (isSparseParcelableArrayList(typeUtils, elementUtils, element.asType())) {
+            // Add it to the Bundle mapper.
+            typeMapper[element.asType().toString()] = "SparseParcelableArray"
+
+            // Add to the kotlin mapper.
+            kotlinMapper[element.asType().toString()] = element.asType().asTypeName()
+        } else if (isParcelableArray(typeUtils, elementUtils, element.asType())) {
+            // Add it to the Bundle mapper.
+            typeMapper[element.asType().toString()] = "ParcelableArray"
+            // Add to the kotlin mapper.
+            kotlinMapper[element.asType().toString()] = element.asType().asTypeName()
+        } else if (isSerializable(typeUtils, elementUtils, element.asType()) && typeMapper[element.asType().toString()] == null) {
+            typeMapper[element.asType().toString()] = "Serializable"
+        }
+    }
+
+    /**
+     * Adds return statement to the getter. Takes
+     * care of whether we have to add type casting
+     * like with Serializable or Parcelable arrays.
+     *
+     * @param bundleMapType Corresponding mapper to Bundle
+     * @param key of the Bundle
+     * @param returnType type to be returned
+     * @param function to add return statement to.
+     * @param castNecessary whether casting is necessary
+     *
+     * @return function builder with the return statement.
+     */
+    internal fun addReturnStatement(bundleMapType: String,
                            key: String,
                            returnType: TypeName,
                            function: FunSpec.Builder,
@@ -194,29 +247,25 @@ class BundleExtensionWriter(
         }
     }
 
+    /**
+     * Check if casting is necessary for the given bundleMapType
+     *
+     * @param bundleMapType
+     * @return whether casting is necessary
+     */
     private fun castingNecessary(bundleMapType: String): Boolean {
         return bundleMapType == "Serializable" || bundleMapType == "ParcelableArray"
     }
 
-    fun returnType(element: Element): String {
-        val returnType = if (typeMapper[element.asType().toString()] == null) {
-            // Not in the normal mapper. Let's check some more
-            if (isParcelable(typeUtils, elementUtils, element.asType())) {
-                 "Parcelable"
-            } else if (isParcelableList(typeUtils, elementUtils, element.asType())) {
-                "ParcelableArrayList"
-            } else if (isSparseParcelableArrayList(typeUtils, elementUtils, element.asType())) {
-                "SparseParcelableArray"
-            } else if (isParcelableArray(typeUtils, elementUtils, element.asType())) {
-                "ParcelableArray"
-            } else if (isSerializable(typeUtils, elementUtils, element.asType())) {
-                "Serializable"
-            } else {
-                null
-            }
-        } else {
-            typeMapper[element.asType().toString()]
-        }
+    /**
+     * Gives the return type of the given element. Checks
+     * the typeMapper
+     *
+     * @param element
+     * @return returnType of element
+     */
+    internal fun returnType(element: Element): String {
+        val returnType = typeMapper[element.asType().toString()]
 
         if (returnType == null) {
             messager.printMessage(Diagnostic.Kind.ERROR, "Element ${element.simpleName} cannot be used with Bundle")
@@ -229,10 +278,7 @@ class BundleExtensionWriter(
         elementUtils: Elements,
         typeMirror: TypeMirror
     ): Boolean {
-        return typeUtils.isAssignable(
-            typeMirror, elementUtils.getTypeElement("android.os.Parcelable")
-                .asType()
-        )
+        return typeUtils.isAssignable(typeMirror, elementUtils.getTypeElement("android.os.Parcelable").asType())
     }
 
     private fun isParcelableArray(
@@ -240,12 +286,7 @@ class BundleExtensionWriter(
         elementUtils: Elements,
         typeMirror: TypeMirror
     ): Boolean {
-        return typeUtils.isAssignable(
-            typeMirror, typeUtils.getArrayType(
-                elementUtils
-                    .getTypeElement("android.os.Parcelable").asType()
-            )
-        )
+        return typeUtils.isAssignable(typeMirror, typeUtils.getArrayType(elementUtils.getTypeElement("android.os.Parcelable").asType()))
     }
 
     private fun isParcelableList(
@@ -259,11 +300,9 @@ class BundleExtensionWriter(
         )
         if (typeUtils.isAssignable(typeUtils.erasure(typeMirror), type)) {
             val typeArguments = (typeMirror as DeclaredType).typeArguments
-            return typeArguments != null && typeArguments.size >= 1 &&
-                    typeUtils.isAssignable(
-                        typeArguments[0],
-                        elementUtils.getTypeElement("android.os.Parcelable").asType()
-                    )
+            return typeArguments != null &&
+                    typeArguments.size >= 1 &&
+                    typeUtils.isAssignable(typeArguments[0], elementUtils.getTypeElement("android.os.Parcelable").asType())
         }
         return false
     }
@@ -280,10 +319,7 @@ class BundleExtensionWriter(
         if (typeUtils.isAssignable(typeUtils.erasure(typeMirror), type)) {
             val typeArguments = (typeMirror as DeclaredType).typeArguments
             return typeArguments != null && typeArguments.size >= 1 &&
-                    typeUtils.isAssignable(
-                        typeArguments[0],
-                        elementUtils.getTypeElement("android.os.Parcelable").asType()
-                    )
+                    typeUtils.isAssignable(typeArguments[0], elementUtils.getTypeElement("android.os.Parcelable").asType())
         }
         return false
     }
@@ -293,9 +329,6 @@ class BundleExtensionWriter(
         elementUtils: Elements,
         typeMirror: TypeMirror
     ): Boolean {
-        return typeUtils.isAssignable(
-            typeMirror, elementUtils.getTypeElement("java.io.Serializable")
-                .asType()
-        )
+        return typeUtils.isAssignable(typeMirror, elementUtils.getTypeElement("java.io.Serializable").asType())
     }
 }

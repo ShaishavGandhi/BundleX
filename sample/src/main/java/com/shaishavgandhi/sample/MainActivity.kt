@@ -13,8 +13,13 @@ class MainActivity : AppCompatActivity() {
 
     @Extra lateinit var longArray: Array<Long>
 
+    lateinit var list: ArrayList<KotlinParcelable>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        val bundle = Bundle()
+        list = bundle.getKotlinParcelableList(arrayListOf())
     }
 }
