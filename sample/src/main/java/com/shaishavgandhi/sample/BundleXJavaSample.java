@@ -2,6 +2,7 @@ package com.shaishavgandhi.sample;
 
 import android.util.Size;
 import android.util.SizeF;
+import android.util.SparseArray;
 
 import com.shaishavgandhi.navigator.Extra;
 
@@ -46,5 +47,8 @@ public class BundleXJavaSample {
     @Extra Size androidSize;
     @Extra SizeF androidSizeF;
     @Extra SampleSerializable sampleSerializable;
-    @Extra KotlinParcelable kotlinParcelable;
+    @Extra KotlinParcelable javaParcelable;
+    @Extra ArrayList<KotlinParcelable> javaParcelableArrayList;
+    @Extra KotlinParcelable[] javaParcelableArray;
+    @Extra SparseArray<KotlinParcelable> javaParcelableSparseArray;
 }
