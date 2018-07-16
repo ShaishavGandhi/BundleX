@@ -149,6 +149,14 @@ class BundleExtensionWriter(
             // Nullable getter
             val nullableGetterBuilder = FunSpec.builder(getterName)
                 .receiver(bundleClass)
+                .addKdoc(CodeBlock.builder()
+                    .addStatement("Extension to extract value from the [android.os.Bundle].")
+                    .add("\n")
+                    .addStatement("Returns a nullable [$returnType] because of the nature of Bundles.")
+                    .addStatement("If you wish to get a non-null value, you can provide a defaultValue.")
+                    .add("\n")
+                    .addStatement("@return value corresponding to the given key")
+                    .build())
                 .returns(returnType.asNullable())
 
             fileBuilder.addFunction(
@@ -159,6 +167,14 @@ class BundleExtensionWriter(
             // Non-null getter
             val nonNullGetterBuilder = FunSpec.builder(getterName)
                 .receiver(bundleClass)
+                .addKdoc(CodeBlock.builder()
+                    .addStatement("Extension to extract value from the [android.os.Bundle].")
+                    .addStatement("Returns the [$returnType] corresponding to the key.")
+                    .add("\n")
+                    .addStatement("@param defaultValue value that is returned if the value for the given key is not present.")
+                    .add("\n")
+                    .addStatement("@return value corresponding to the given key")
+                    .build())
                 .addParameter(ParameterSpec.builder("defaultValue", returnType)
                     .build())
                 .returns(returnType)
@@ -174,6 +190,11 @@ class BundleExtensionWriter(
             // Putter
             fileBuilder.addFunction(FunSpec.builder(putterName)
                 .receiver(bundleClass)
+                .addKdoc(CodeBlock.builder()
+                    .addStatement("Extension to set value to the [android.os.Bundle].")
+                    .add("\n")
+                    .addStatement("@param value that is added to the [android.os.Bundle] for the given key.")
+                    .build())
                 .addParameter(ParameterSpec.builder("value", returnType).build())
                 .addStatement("put%L(\"%L\", %L)", bundleMapType, key, "value")
                 .build())
