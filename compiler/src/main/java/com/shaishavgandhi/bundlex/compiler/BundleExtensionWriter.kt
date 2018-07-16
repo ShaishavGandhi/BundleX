@@ -13,12 +13,12 @@ import javax.lang.model.util.Types
 import javax.tools.Diagnostic
 
 class BundleExtensionWriter(
-    val messager: Messager,
-    val typeUtils: Types,
-    val elementUtils: Elements) {
+    private val messager: Messager,
+    private val typeUtils: Types,
+    private val elementUtils: Elements) {
 
-    val bundleClass = ClassName.bestGuess("android.os.Bundle")
-    val kotlinArrayList = ClassName("kotlin.collections", "ArrayList")
+    private val bundleClass = ClassName.bestGuess("android.os.Bundle")
+    private val kotlinArrayList = ClassName("kotlin.collections", "ArrayList")
 
     /**
      * Java type -> Kotlin type mapper.
