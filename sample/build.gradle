@@ -29,6 +29,7 @@ dependencies {
     implementation rootProject.appcompat
     implementation rootProject.constraintLayout
     testImplementation rootProject.junit
+    testImplementation rootProject.robolectric
 
     compileOnly rootProject.annotations
     kapt project(":compiler")
