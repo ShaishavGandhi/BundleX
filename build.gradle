@@ -30,7 +30,7 @@ ext {
     jetbrainsAnnotations = "org.jetbrains:annotations:16.0.2"
     supportLibrary = "com.android.support:support-v4:27.1.1"
     androidxFragment = "androidx.fragment:fragment:1.0.0-alpha3"
-    kotlinpoet = "com.squareup:kotlinpoet:0.7.0"
+    kotlinpoet = "com.squareup:kotlinpoet:1.0.0-RC1"
     annotations = "com.shaishavgandhi.navigator:navigator-annotations:0.3.1"
 
     compileTesting = "com.google.testing.compile:compile-testing:0.15"

@@ -380,7 +380,7 @@ class BundleXTest {
         )
         bundle.putJavaParcelableArray(value)
 
-        assertEquals(value, bundle.getJavaParcelableArray())
+        assertArrayEquals(value, bundle.getJavaParcelableArray())
     }
 
     @Test fun testParcelableArrayNull() {
