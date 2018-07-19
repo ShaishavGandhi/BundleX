@@ -11,6 +11,7 @@ import javax.lang.model.type.TypeMirror
 import javax.lang.model.util.Elements
 import javax.lang.model.util.Types
 import javax.tools.Diagnostic
+import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 
 class BundleExtensionWriter(
     private val messager: Messager,
@@ -72,11 +73,11 @@ class BundleExtensionWriter(
         "java.lang.Character[]" to ClassName("kotlin", "CharArray"),
 
         "java.lang.CharSequence" to ClassName("kotlin", "CharSequence"),
-        "java.lang.CharSequence[]" to ParameterizedTypeName.get(
-            ClassName("kotlin", "Array"),
-            ClassName("kotlin", "CharSequence")),
-        "java.util.ArrayList<java.lang.CharSequence>" to ParameterizedTypeName.get(
-            kotlinArrayList, ClassName("kotlin", "CharSequence"))
+        "java.lang.CharSequence[]" to ClassName("kotlin", "Array"),
+        "java.lang.CharSequence[]" to ClassName("kotlin", "Array")
+            .parameterizedBy(ClassName("kotlin", "CharSequence")),
+        "java.util.ArrayList<java.lang.CharSequence>" to kotlinArrayList
+            .parameterizedBy(ClassName("kotlin", "CharSequence"))
     )
 
     private val typeMapper = object : HashMap<String, String>() {
@@ -226,7 +227,7 @@ class BundleExtensionWriter(
             // Even if the element is declared in Kotlin class, the underlying JVM
             // impl is still java.util.ArrayList and that's what we get.
             val genericType = (element.asType() as DeclaredType).typeArguments[0].asTypeName()
-            kotlinMapper[element.asType().toString()] = ParameterizedTypeName.get(kotlinArrayList, genericType)
+            kotlinMapper[element.asType().toString()] = kotlinArrayList.parameterizedBy(genericType)
         } else if (isSparseParcelableArrayList(typeUtils, elementUtils, element.asType())) {
             // Add it to the Bundle mapper.
             typeMapper[element.asType().toString()] = "SparseParcelableArray"
