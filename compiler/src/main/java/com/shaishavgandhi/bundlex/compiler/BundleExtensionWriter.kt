@@ -158,7 +158,7 @@ class BundleExtensionWriter(
                     .add("\n")
                     .addStatement("@return value corresponding to the given key")
                     .build())
-                .returns(returnType.asNullable())
+                .returns(returnType.copy(nullable = true))
 
             fileBuilder.addFunction(
                 addReturnStatement(bundleMapType, key, returnType, nullableGetterBuilder, isCastNecessary)
